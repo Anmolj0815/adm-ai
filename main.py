@@ -23,7 +23,7 @@ from tenacity import (
 from dotenv import load_dotenv
 from mistralai.client import MistralClient
 # Correct import
-from mistralai.models.chat import ChatMessage
+from mistralai.models import ChatMessage
 
 load_dotenv()
 

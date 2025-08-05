@@ -7,6 +7,7 @@ from typing import List, Dict, Any
 from dotenv import load_dotenv
 from mistralai.client import MistralClient
 import numpy as np
+import faiss
 
 load_dotenv()
 
@@ -17,19 +18,26 @@ class DocumentProcessor:
         self.mistral_client = MistralClient(api_key=os.getenv("MISTRAL_API_KEY"))
 
     async def _download_pdf(self, url: str) -> str:
+        """
+        Asynchronously downloads a PDF from a given URL to a temporary local file.
+        """
         local_filename = os.path.join(self.temp_dir, url.split('/')[-1].split('?')[0])
         if not local_filename.endswith(".pdf"):
             local_filename += ".pdf"
         print(f"Downloading PDF from {url} to {local_filename}")
+        
         async with aiofiles.open(local_filename, 'wb') as f:
-            async with requests.get(url, stream=True) as response:
-                response.raise_for_status()
-                for chunk in response.iter_content(chunk_size=8192):
-                    await f.write(chunk)
+            response = await asyncio.to_thread(requests.get, url, stream=True)
+            response.raise_for_status()
+            for chunk in response.iter_content(chunk_size=8192):
+                await f.write(chunk)
         print(f"Downloaded: {local_filename}")
         return local_filename
 
     def _extract_text_from_pdf(self, file_path: str) -> str:
+        """
+        Extracts all text from a local PDF file.
+        """
         print(f"Extracting text from PDF: {file_path}")
         reader = PdfReader(file_path)
         text = ""
@@ -38,6 +46,9 @@ class DocumentProcessor:
         return text
 
     def _get_text_chunks(self, text: str, chunk_size: int = 1000, overlap: int = 100) -> List[str]:
+        """
+        Splits a long text into smaller, overlapping chunks suitable for embedding.
+        """
         chunks = []
         words = text.split()
         current_chunk = []
@@ -57,6 +68,9 @@ class DocumentProcessor:
         return chunks
 
     def _embed_texts(self, texts: List[str]) -> np.ndarray:
+        """
+        Generates vector embeddings for a list of text chunks using Mistral Embed.
+        """
         print(f"Embedding {len(texts)} chunks using Mistral Embed...")
         try:
             embeddings_response = self.mistral_client.embeddings(
@@ -64,12 +78,17 @@ class DocumentProcessor:
                 input=texts
             )
             embeddings = [data.embedding for data in embeddings_response.data]
-            return np.array(embeddings).astype('float32') # FAISS requires float32
+            return np.array(embeddings).astype('float32')
         except Exception as e:
             print(f"Error embedding texts with Mistral: {e}")
             raise
 
     async def process_url_for_embeddings(self, url: str) -> List[Dict[str, Any]]:
+        """
+        Handles the full pipeline: downloads a PDF from a URL, extracts text,
+        chunks the text, embeds the chunks, and returns a list of dictionaries
+        with chunk text and its embedding.
+        """
         local_file_path = ""
         try:
             local_file_path = await self._download_pdf(url)
@@ -87,7 +106,7 @@ class DocumentProcessor:
                 indexed_data.append({
                     "embedding": embeddings[i],
                     "text": chunk,
-                    "source": f"{url}_chunk_{i}" # Identifier for justification
+                    "source": f"{url}_chunk_{i}"
                 })
             return indexed_data
         finally:

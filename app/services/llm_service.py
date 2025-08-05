@@ -11,6 +11,7 @@ from ..utils.helpers import get_env_variable
 import asyncio
 import aiohttp
 import faiss
+import pickle
 
 load_dotenv()
 
@@ -24,25 +25,23 @@ class LLMService:
             self.client = None
 
         self.document_processor = DocumentProcessor()
+        self.indexed_documents_data = self._load_embeddings()
+        if self.indexed_documents_data:
+            print(f"Loaded {len(self.indexed_documents_data)} document chunks for RAG.")
+            
+    def _load_embeddings(self):
+        embeddings_path = "data/embeddings/admissions_embeddings.pkl"
+        if os.path.exists(embeddings_path):
+            with open(embeddings_path, 'rb') as f:
+                return pickle.load(f)
+        else:
+            print("WARNING: Embeddings file not found. RAG functionality will be limited. Please run the preprocessing script.")
+            return []
 
-    async def process_admission_query(self, query: str, document_urls: List[str]) -> AdmissionDecisionResponse:
-        indexed_documents_data = []
-        if document_urls:
-            for url in document_urls:
-                print(f"Processing document from URL for RAG: {url}")
-                try:
-                    doc_data = await self.document_processor.process_url_for_embeddings(url)
-                    if doc_data:
-                        indexed_documents_data.extend(doc_data)
-                except Exception as e:
-                    print(f"Error processing document from {url}: {e}")
-
-        retrieved_information = self._semantically_retrieve_information(query, indexed_documents_data)
-
+    async def process_admission_query(self, query: str) -> AdmissionDecisionResponse:
+        retrieved_information = self._semantically_retrieve_information(query, self.indexed_documents_data)
         parsed_query = self._parse_query_with_llm(query)
-
         decision, amount, justification, clauses_used = await self._evaluate_with_llm(parsed_query, retrieved_information)
-
         return AdmissionDecisionResponse(
             Decision=decision,
             Amount=amount,
@@ -153,9 +152,6 @@ class LLMService:
             return "Error", None, "An error occurred during decision evaluation.", []
 
     async def _trigger_n8n_workflow(self, query: str, justification: str, relevant_docs: list):
-        """
-        Makes an asynchronous POST request to the n8n webhook.
-        """
         webhook_payload = {
             "original_query": query,
             "decision_justification": justification,

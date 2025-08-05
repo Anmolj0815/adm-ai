@@ -58,7 +58,7 @@ class DocumentProcessor:
                 raise
         return np.array(all_embeddings).astype('float32')
 
-    def pre_index_documents(self, data_dir: str = "data/admission_policies", output_path: str = "data/embeddings/admissions_embeddings.pkl"):
+    def pre_index_documents(self, data_dir: str = "data/admission_policies") -> List[Dict[str, Any]]:
         all_chunks = []
         source_map = []
         
@@ -73,7 +73,7 @@ class DocumentProcessor:
         
         if not all_chunks:
             print("No documents found or no text extracted. Index not created.")
-            return
+            return []
 
         embeddings_array = self._embed_texts_in_batches(all_chunks)
         
@@ -85,7 +85,4 @@ class DocumentProcessor:
                 "source": source_map[i]
             })
 
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        with open(output_path, 'wb') as f:
-            pickle.dump(indexed_data, f)
-        print(f"Successfully created and saved embeddings index to {output_path}")
+        return indexed_data

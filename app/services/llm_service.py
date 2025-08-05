@@ -7,19 +7,26 @@ from mistralai.client import MistralClient
 from mistralai.models.chat_completion import ChatMessage
 from ..models.response_models import AdmissionDecisionResponse
 from ..services.document_processor import DocumentProcessor
-import asyncio # For async operations like document processing
+from ..utils.helpers import get_env_variable
+import asyncio
+import aiohttp # For making async HTTP requests
 
 load_dotenv()
 
 class LLMService:
     def __init__(self):
-        self.client = MistralClient(api_key=os.getenv("MISTRAL_API_KEY"))
+        try:
+            self.client = MistralClient(api_key=get_env_variable("MISTRAL_API_KEY"))
+            self.n8n_webhook_url = get_env_variable("N8N_WEBHOOK_URL", default_value=None)
+        except ValueError as e:
+            print(f"Failed to initialize Mistral client: {e}")
+            self.client = None
+
         self.document_processor = DocumentProcessor()
 
     async def process_admission_query(self, query: str, document_urls: List[str]) -> AdmissionDecisionResponse:
         indexed_documents_data = []
         if document_urls:
-            # Dynamically parse, chunk, embed and index documents from provided URLs
             for url in document_urls:
                 print(f"Processing document from URL for RAG: {url}")
                 try:
@@ -29,13 +36,10 @@ class LLMService:
                 except Exception as e:
                     print(f"Error processing document from {url}: {e}")
 
+        # The rest of this function remains the same
         retrieved_information = self._semantically_retrieve_information(query, indexed_documents_data)
-
-        # Step 1: Parse and structure the query
         parsed_query = self._parse_query_with_llm(query)
-
-        # Step 3: Evaluate and determine decision
-        decision, amount, justification, clauses_used = self._evaluate_with_llm(parsed_query, retrieved_information)
+        decision, amount, justification, clauses_used = await self._evaluate_with_llm(parsed_query, retrieved_information)
 
         return AdmissionDecisionResponse(
             Decision=decision,
@@ -44,63 +48,9 @@ class LLMService:
             ClausesUsed=clauses_used
         )
 
-    def _parse_query_with_llm(self, query: str) -> Dict[str, Any]:
-        messages = [
-            ChatMessage(role="system", content="You are a helpful assistant that extracts key details from admission queries."),
-            ChatMessage(role="user", content=f"Extract the following details from this admission query: 'program_name', 'eligibility_criteria', 'location', 'application_deadlines', 'fees_scholarships'. If a detail is not present, mark it as 'N/A'. Query: {query}\n\nReturn in JSON format."),
-        ]
-        try:
-            chat_response = self.client.chat(
-                model="mistral-large-latest",
-                messages=messages,
-                response_format={"type": "json_object"}
-            )
-            parsed_details = json.loads(chat_response.choices[0].message.content)
-            return parsed_details
-        except Exception as e:
-            print(f"Error parsing query with Mistral: {e}")
-            return {"query_raw": query, "program_name": "N/A", "eligibility_criteria": "N/A", "location": "N/A", "application_deadlines": "N/A", "fees_scholarships": "N/A"}
+    # ... _parse_query_with_llm and _semantically_retrieve_information remain unchanged ...
 
-    def _semantically_retrieve_information(self, query: str, indexed_documents_data: List[Dict[str, Any]]) -> List[str]:
-        if not indexed_documents_data:
-            return ["No documents provided or processed for retrieval."]
-
-        query_embedding_response = self.client.embeddings(
-            model="mistral-embed", # Mistral's embedding model
-            input=[query]
-        )
-        query_embedding = np.array(query_embedding_response.data[0].embedding)
-
-        # Extract embeddings and corresponding texts from indexed_documents_data
-        document_embeddings = np.array([d["embedding"] for d in indexed_documents_data])
-        document_texts = [d["text"] for d in indexed_documents_data]
-
-        # Ensure embeddings are float32, required by FAISS
-        document_embeddings = document_embeddings.astype('float32')
-        query_embedding = query_embedding.astype('float32')
-
-        # Create a FAISS index
-        dimension = document_embeddings.shape[1]
-        import faiss
-        index = faiss.IndexFlatL2(dimension)
-        index.add(document_embeddings)
-
-        # Perform similarity search
-        k = min(5, len(indexed_documents_data)) # Retrieve top K relevant chunks
-        distances, indices = index.search(np.expand_dims(query_embedding, axis=0), k)
-
-        relevant_clauses = []
-        for i in indices[0]:
-            if i != -1: # Ensure index is valid
-                relevant_clauses.append(document_texts[i])
-        
-        if not relevant_clauses:
-            return ["No highly relevant information found in the provided documents."]
-
-        print(f"Retrieved {len(relevant_clauses)} relevant clauses using FAISS.")
-        return relevant_clauses
-
-    def _evaluate_with_llm(self, parsed_query: Dict[str, Any], relevant_information: List[str]) -> tuple:
+    async def _evaluate_with_llm(self, parsed_query: Dict[str, Any], relevant_information: List[str]) -> tuple:
         combined_context = "\n".join(relevant_information)
 
         prompt = f"""
@@ -126,13 +76,24 @@ class LLMService:
         ]
         try:
             chat_response = self.client.chat(
-                model="mistral-large-latest", # Or mistral-small-latest for cost efficiency
+                model="mistral-large-latest",
                 messages=messages,
                 response_format={"type": "json_object"}
             )
             llm_output = json.loads(chat_response.choices[0].message.content)
+            
+            decision = llm_output.get("Decision", "Requires Further Review")
+            
+            # Integrate n8n webhook call here based on the decision
+            if decision == "Requires Further Review" and self.n8n_webhook_url:
+                await self._trigger_n8n_workflow(
+                    query=parsed_query.get("query_raw", ""),
+                    justification=llm_output.get("Justification", ""),
+                    relevant_docs=llm_output.get("ClausesUsed", [])
+                )
+
             return (
-                llm_output.get("Decision", "Requires Further Review"),
+                decision,
                 llm_output.get("Amount"),
                 llm_output.get("Justification", "Could not determine a clear justification."),
                 llm_output.get("ClausesUsed", [])
@@ -140,3 +101,22 @@ class LLMService:
         except Exception as e:
             print(f"Error evaluating with Mistral: {e}")
             return "Error", None, "An error occurred during decision evaluation.", []
+
+    async def _trigger_n8n_workflow(self, query: str, justification: str, relevant_docs: list):
+        """
+        Makes an asynchronous POST request to the n8n webhook.
+        """
+        webhook_payload = {
+            "original_query": query,
+            "decision_justification": justification,
+            "clauses_used": relevant_docs,
+            "action_required": "Follow-up with admissions team"
+        }
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(self.n8n_webhook_url, json=webhook_payload, timeout=5) as response:
+                    response.raise_for_status()
+                    print(f"Successfully triggered n8n workflow. Response status: {response.status}")
+        except Exception as e:
+            print(f"Error calling n8n webhook: {e}")

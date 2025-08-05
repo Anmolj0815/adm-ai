@@ -9,21 +9,19 @@ app = FastAPI(
     version="1.0.0",
 )
 
-app.include_router(router)
+llm_service = LLMService()
 
 @app.on_event("startup")
 async def startup_event():
     """
     This function runs once when the application starts.
-    It triggers the pre-indexing process for all documents.
+    It triggers the pre-indexing process for all documents from the repository.
     """
-    llm_service = LLMService()
-    # Check if embeddings file exists
-    if not os.path.exists("data/embeddings/admissions_embeddings.pkl"):
-        print("Embeddings file not found. Pre-indexing documents...")
-        llm_service.document_processor.pre_index_documents()
-    else:
-        print("Embeddings file found. Skipping pre-indexing on startup.")
+    print("Pre-indexing documents on startup...")
+    llm_service.indexed_documents_data = llm_service.document_processor.pre_index_documents()
+    print("Pre-indexing complete. API is ready.")
+
+app.include_router(router)
 
 @app.get("/")
 async def root():

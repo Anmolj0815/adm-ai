@@ -41,9 +41,7 @@ class DocumentProcessor:
         return text
 
     def _get_text_chunks(self, text: str, chunk_size: int = 1000, overlap: int = 100) -> List[str]:
-        # This is a more robust chunking method
         chunks = []
-        # Split by paragraphs or double newlines first
         paragraphs = text.split('\n\n')
         current_chunk = ""
         
@@ -52,7 +50,6 @@ class DocumentProcessor:
             if not para:
                 continue
             
-            # Check if adding the paragraph would exceed the chunk size
             if len(current_chunk) + len(para) > chunk_size and current_chunk:
                 chunks.append(current_chunk)
                 current_chunk = para

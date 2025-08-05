@@ -5,7 +5,7 @@ import itertools
 import logging
 import json
 import random
-import time # Add this line
+import time
 from typing import List, Optional, Dict, Any
 
 from fastapi import FastAPI, Depends, HTTPException, status, Request
@@ -40,8 +40,8 @@ from langchain.prompts import PromptTemplate
 from langchain_core.documents import Document
 
 # --- Environment Variables and Configuration ---
-MISTRAL_API_KEY_STR = os.getenv("MISTRAL_API_KEY")
-if not MISTRAL_API_KEY_STR:
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+if not MISTRAL_API_KEY:
     raise ValueError("MISTRAL_API_KEY environment variable is not set.")
 
 N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL")
@@ -94,7 +94,7 @@ CUSTOM_PROMPT = PromptTemplate(template=PROMPT_TEMPLATE, input_variables=["conte
 )
 def embed_documents_with_retries(docs: List[Document]) -> FAISS:
     """Embed documents with retries."""
-    embeddings = MistralAIEmbeddings(model="mistral-embed", mistral_api_key=MISTRAL_API_KEY_STR)
+    embeddings = MistralAIEmbeddings(model="mistral-embed", mistral_api_key=MISTRAL_API_KEY)
     logger.info("Creating embeddings and building FAISS vector store...")
     return FAISS.from_documents(docs, embeddings)
 
@@ -108,7 +108,7 @@ async def process_question_with_retries(question: str, vector_store: FAISS) -> s
     """
     Handles the RAG chain invocation with built-in retries.
     """
-    llm = ChatMistralAI(model="mistral-large-latest", temperature=0, mistral_api_key=MISTRAL_API_KEY_STR)
+    llm = ChatMistralAI(model="mistral-large-latest", temperature=0, mistral_api_key=MISTRAL_API_KEY)
     
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm,

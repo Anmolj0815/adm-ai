@@ -54,6 +54,13 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# --- Pydantic Models for API Request/Response ---
+class QueryRequest(BaseModel):
+    query: str
+
+class QueryResponse(BaseModel):
+    answer: str
+
 # --- Global State for the RAG System ---
 class RAGState:
     vector_store: Optional[FAISS] = None
@@ -175,9 +182,7 @@ async def startup_event():
         logger.exception(f"--- ERROR during RAG System Initialization: {e} ---")
         raise RuntimeError(f"RAG system initialization failed: {e}")
 
-# main.py
-# ... all other code ...
-
+# --- API Endpoint ---
 @app.post(
     "/inquire",
     response_model=QueryResponse,

@@ -111,7 +111,7 @@ class LLMService:
         2.  **Be specific and factual.** Do not make assumptions or generalize.
         3.  **For Eligibility:** Provide specific percentages, degree requirements, and deadlines.
         4.  **For Final Selection:** Provide the parameters and their exact percentage weights.
-        5.  **If the answer is not in the context,** state: "I cannot answer this question based on the provided documents."
+        5.  **If the answer is not in the context,** answer with your own knowledge."
 
         The query details have been pre-parsed for you, and relevant document clauses have been retrieved.
 

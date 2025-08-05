@@ -3,10 +3,12 @@ services:
     name: admission-ai-assistant
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: vpxZ7KUngUDdiXT07Yb23W6a8f7aUTNx
         sync: false
       - key: sk_0b8a987b32f7845cd57e2d145c0f1fb36ccff4c80d3ec270
+        sync: false
+      - key: https://llmrx.app.n8n.cloud/webhook/216d0d56-5776-454a-9c16-4d4439ca80e2
         sync: false
     healthCheckPath: /

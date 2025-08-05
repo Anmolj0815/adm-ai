@@ -5,8 +5,8 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: MISTRAL_API_KEY
+      - key: vpxZ7KUngUDdiXT07Yb23W6a8f7aUTNx
         sync: false
-      - key: ELEVENLABS_API_KEY
+      - key: sk_0b8a987b32f7845cd57e2d145c0f1fb36ccff4c80d3ec270
         sync: false
     healthCheckPath: /

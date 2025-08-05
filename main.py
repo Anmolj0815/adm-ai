@@ -175,12 +175,8 @@ async def startup_event():
         logger.exception(f"--- ERROR during RAG System Initialization: {e} ---")
         raise RuntimeError(f"RAG system initialization failed: {e}")
 
-# --- API Endpoint ---
-class QueryRequest(BaseModel):
-    query: str
-
-class QueryResponse(BaseModel):
-    answer: str
+# main.py
+# ... all other code ...
 
 @app.post(
     "/inquire",
@@ -193,7 +189,9 @@ async def inquire_admission(request: QueryRequest):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="RAG system is not initialized. Check startup logs for errors."
         )
-
+    
+    # --- ADD THIS DEBUGGING LINE ---
+    print(f"Received query: {request.query}")
     logger.info(f"Processing question: '{request.query}'")
     
     try:

@@ -1,43 +1,19 @@
 import os
-import requests
-import asyncio
-import aiofiles
 from pypdf import PdfReader
 from typing import List, Dict, Any
 from dotenv import load_dotenv
 from mistralai.client import MistralClient
 import numpy as np
 import faiss
+import pickle
 
 load_dotenv()
 
 class DocumentProcessor:
     def __init__(self):
-        self.temp_dir = "data/temp_docs"
-        os.makedirs(self.temp_dir, exist_ok=True)
         self.mistral_client = MistralClient(api_key=os.getenv("MISTRAL_API_KEY"))
 
-    async def _download_pdf(self, url: str) -> str:
-        """
-        Asynchronously downloads a PDF from a given URL to a temporary local file.
-        """
-        local_filename = os.path.join(self.temp_dir, url.split('/')[-1].split('?')[0])
-        if not local_filename.endswith(".pdf"):
-            local_filename += ".pdf"
-        print(f"Downloading PDF from {url} to {local_filename}")
-        
-        async with aiofiles.open(local_filename, 'wb') as f:
-            response = await asyncio.to_thread(requests.get, url, stream=True)
-            response.raise_for_status()
-            for chunk in response.iter_content(chunk_size=8192):
-                await f.write(chunk)
-        print(f"Downloaded: {local_filename}")
-        return local_filename
-
     def _extract_text_from_pdf(self, file_path: str) -> str:
-        """
-        Extracts all text from a local PDF file.
-        """
         print(f"Extracting text from PDF: {file_path}")
         reader = PdfReader(file_path)
         text = ""
@@ -46,9 +22,6 @@ class DocumentProcessor:
         return text
 
     def _get_text_chunks(self, text: str, chunk_size: int = 1000, overlap: int = 100) -> List[str]:
-        """
-        Splits a long text into smaller, overlapping chunks suitable for embedding.
-        """
         chunks = []
         words = text.split()
         current_chunk = []
@@ -67,49 +40,52 @@ class DocumentProcessor:
             chunks.append(" ".join(current_chunk))
         return chunks
 
-    def _embed_texts(self, texts: List[str]) -> np.ndarray:
-        """
-        Generates vector embeddings for a list of text chunks using Mistral Embed.
-        """
-        print(f"Embedding {len(texts)} chunks using Mistral Embed...")
-        try:
-            embeddings_response = self.mistral_client.embeddings(
-                model="mistral-embed",
-                input=texts
-            )
-            embeddings = [data.embedding for data in embeddings_response.data]
-            return np.array(embeddings).astype('float32')
-        except Exception as e:
-            print(f"Error embedding texts with Mistral: {e}")
-            raise
+    def _embed_texts_in_batches(self, texts: List[str], batch_size: int = 250) -> np.ndarray:
+        print(f"Embedding {len(texts)} chunks in batches of {batch_size}...")
+        all_embeddings = []
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            try:
+                embeddings_response = self.mistral_client.embeddings(
+                    model="mistral-embed",
+                    input=batch
+                )
+                embeddings = [data.embedding for data in embeddings_response.data]
+                all_embeddings.extend(embeddings)
+                print(f"Processed batch {i // batch_size + 1}")
+            except Exception as e:
+                print(f"Error embedding batch with Mistral: {e}")
+                raise
+        return np.array(all_embeddings).astype('float32')
 
-    async def process_url_for_embeddings(self, url: str) -> List[Dict[str, Any]]:
-        """
-        Handles the full pipeline: downloads a PDF from a URL, extracts text,
-        chunks the text, embeds the chunks, and returns a list of dictionaries
-        with chunk text and its embedding.
-        """
-        local_file_path = ""
-        try:
-            local_file_path = await self._download_pdf(url)
-            full_text = self._extract_text_from_pdf(local_file_path)
-            chunks = self._get_text_chunks(full_text)
+    def pre_index_documents(self, data_dir: str = "data/admission_policies", output_path: str = "data/embeddings/admissions_embeddings.pkl"):
+        all_chunks = []
+        source_map = []
+        
+        for root, _, files in os.walk(data_dir):
+            for file_name in files:
+                if file_name.endswith(".pdf"):
+                    file_path = os.path.join(root, file_name)
+                    full_text = self._extract_text_from_pdf(file_path)
+                    chunks = self._get_text_chunks(full_text)
+                    all_chunks.extend(chunks)
+                    source_map.extend([f"{file_name}_chunk_{i}" for i in range(len(chunks))])
+        
+        if not all_chunks:
+            print("No documents found or no text extracted. Index not created.")
+            return
 
-            if not chunks:
-                print(f"No text chunks extracted from {url}")
-                return []
+        embeddings_array = self._embed_texts_in_batches(all_chunks)
+        
+        indexed_data = []
+        for i, chunk in enumerate(all_chunks):
+            indexed_data.append({
+                "embedding": embeddings_array[i],
+                "text": chunk,
+                "source": source_map[i]
+            })
 
-            embeddings = self._embed_texts(chunks)
-
-            indexed_data = []
-            for i, chunk in enumerate(chunks):
-                indexed_data.append({
-                    "embedding": embeddings[i],
-                    "text": chunk,
-                    "source": f"{url}_chunk_{i}"
-                })
-            return indexed_data
-        finally:
-            if os.path.exists(local_file_path):
-                os.remove(local_file_path)
-                print(f"Cleaned up temporary file: {local_file_path}")
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        with open(output_path, 'wb') as f:
+            pickle.dump(indexed_data, f)
+        print(f"Successfully created and saved embeddings index to {output_path}")

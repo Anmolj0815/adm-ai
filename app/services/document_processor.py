@@ -41,22 +41,27 @@ class DocumentProcessor:
         return text
 
     def _get_text_chunks(self, text: str, chunk_size: int = 1000, overlap: int = 100) -> List[str]:
+        # This is a more robust chunking method
         chunks = []
-        words = text.split()
-        current_chunk = []
-        current_length = 0
-
-        for word in words:
-            if current_length + len(word) + 1 > chunk_size and current_chunk:
-                chunks.append(" ".join(current_chunk))
-                current_chunk = current_chunk[-overlap:] if len(current_chunk) > overlap else []
-                current_length = sum(len(w) + 1 for w in current_chunk) - 1 if current_chunk else 0
-
-            current_chunk.append(word)
-            current_length += len(word) + 1
-
+        # Split by paragraphs or double newlines first
+        paragraphs = text.split('\n\n')
+        current_chunk = ""
+        
+        for para in paragraphs:
+            para = para.strip()
+            if not para:
+                continue
+            
+            # Check if adding the paragraph would exceed the chunk size
+            if len(current_chunk) + len(para) > chunk_size and current_chunk:
+                chunks.append(current_chunk)
+                current_chunk = para
+            else:
+                current_chunk += ' ' + para
+                
         if current_chunk:
-            chunks.append(" ".join(current_chunk))
+            chunks.append(current_chunk)
+            
         return chunks
 
     def _embed_texts_in_batches(self, texts: List[str], batch_size: int = 250) -> np.ndarray:

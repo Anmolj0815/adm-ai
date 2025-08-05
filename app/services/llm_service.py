@@ -28,14 +28,14 @@ class LLMService:
         self.indexed_documents_data = self._load_embeddings()
         if self.indexed_documents_data:
             print(f"Loaded {len(self.indexed_documents_data)} document chunks for RAG.")
-            
+
     def _load_embeddings(self):
         embeddings_path = "data/embeddings/admissions_embeddings.pkl"
         if os.path.exists(embeddings_path):
             with open(embeddings_path, 'rb') as f:
                 return pickle.load(f)
         else:
-            print("WARNING: Embeddings file not found. RAG functionality will be limited. Please run the preprocessing script.")
+            print("WARNING: Embeddings file not found. RAG functionality will be limited.")
             return []
 
     async def process_admission_query(self, query: str) -> AdmissionDecisionResponse:

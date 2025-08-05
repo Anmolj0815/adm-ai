@@ -93,24 +93,33 @@ class LLMService:
         combined_context = "\n".join(relevant_information)
 
         prompt = f"""
-        Given the following admission query details and relevant information extracted from admission policies, determine the admission decision (Approved, Rejected, Requires Further Review), the applicable amount (e.g., application fee, scholarship), and a justification, referencing the specific points/clauses from the 'Relevant Information'.
+        You are an AI assistant designed to act as an expert admissions officer for Indian Institute of Management Mumbai. Your task is to accurately answer a candidate's query and make a decision based **only** on the provided 'Relevant Information' from the official admission policy.
 
-        Query Details: {json.dumps(parsed_query, indent=2)}
-        Relevant Information:
+        CRITICAL INSTRUCTIONS:
+        1.  **Strictly use the provided context.** Do not use any external knowledge.
+        2.  **Be specific and factual.** Do not make assumptions or generalize.
+        3.  **For Eligibility:** Provide specific percentages, degree requirements, and deadlines.
+        4.  **For Final Selection:** Provide the parameters and their exact percentage weights.
+        5.  **If the answer is not in the context,** state: "I cannot answer this question based on the provided documents."
+
+        The query details have been pre-parsed for you, and relevant document clauses have been retrieved.
+
+        Query Details:
+        {json.dumps(parsed_query, indent=2)}
+
+        Relevant Information from Policy Documents:
         {combined_context}
 
-        If an applicant meets all criteria based on the relevant information, the decision is 'Approved'. If they clearly do not meet criteria, it's 'Rejected'. If more information is needed or the information is insufficient to make a definite decision, it's 'Requires Further Review'.
-
-        Provide the response in the following JSON format:
+        Now, based on the above, provide a decision and justification in the following JSON format:
         {{
             "Decision": "string",
             "Amount": "number or null",
-            "Justification": "string explaining the decision based on relevant information, citing specific details/clauses.",
-            "ClausesUsed": ["list of key phrases or summarized clause identifiers used"]
+            "Justification": "string explaining the decision based on the relevant information. Mention specific percentages, dates, or criteria.",
+            "ClausesUsed": ["list of key phrases, sentences, or paragraphs from the 'Relevant Information' that support the justification."]
         }}
         """
         messages = [
-            ChatMessage(role="system", content="You are an AI assistant for admission inquiries. Provide clear decisions and justifications based on provided information. Be concise and precise."),
+            ChatMessage(role="system", content="You are a helpful and precise admissions officer for IIM Mumbai."),
             ChatMessage(role="user", content=prompt)
         ]
         try:

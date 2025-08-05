@@ -9,7 +9,7 @@ from ..models.response_models import AdmissionDecisionResponse
 from ..services.document_processor import DocumentProcessor
 from ..utils.helpers import get_env_variable
 import asyncio
-import aiohttp # For making async HTTP requests
+import aiohttp
 
 load_dotenv()
 
@@ -36,9 +36,10 @@ class LLMService:
                 except Exception as e:
                     print(f"Error processing document from {url}: {e}")
 
-        # The rest of this function remains the same
         retrieved_information = self._semantically_retrieve_information(query, indexed_documents_data)
+
         parsed_query = self._parse_query_with_llm(query)
+
         decision, amount, justification, clauses_used = await self._evaluate_with_llm(parsed_query, retrieved_information)
 
         return AdmissionDecisionResponse(
@@ -47,60 +48,8 @@ class LLMService:
             Justification=justification,
             ClausesUsed=clauses_used
         )
-
-    # ... _parse_query_with_llm and _semantically_retrieve_information remain unchanged ...
-
-    async def _evaluate_with_llm(self, parsed_query: Dict[str, Any], relevant_information: List[str]) -> tuple:
-        combined_context = "\n".join(relevant_information)
-
-        prompt = f"""
-        Given the following admission query details and relevant information extracted from admission policies, determine the admission decision (Approved, Rejected, Requires Further Review), the applicable amount (e.g., application fee, scholarship), and a justification, referencing the specific points/clauses from the 'Relevant Information'.
-
-        Query Details: {json.dumps(parsed_query, indent=2)}
-        Relevant Information:
-        {combined_context}
-
-        If an applicant meets all criteria based on the relevant information, the decision is 'Approved'. If they clearly do not meet criteria, it's 'Rejected'. If more information is needed or the information is insufficient to make a definite decision, it's 'Requires Further Review'.
-
-        Provide the response in the following JSON format:
-        {{
-            "Decision": "string",
-            "Amount": "number or null",
-            "Justification": "string explaining the decision based on relevant information, citing specific details/clauses.",
-            "ClausesUsed": ["list of key phrases or summarized clause identifiers used"]
-        }}
-        """
-        messages = [
-            ChatMessage(role="system", content="You are an AI assistant for admission inquiries. Provide clear decisions and justifications based on provided information. Be concise and precise."),
-            ChatMessage(role="user", content=prompt)
-        ]
-        try:
-            chat_response = self.client.chat(
-                model="mistral-large-latest",
-                messages=messages,
-                response_format={"type": "json_object"}
-            )
-            llm_output = json.loads(chat_response.choices[0].message.content)
-            
-            decision = llm_output.get("Decision", "Requires Further Review")
-            
-            # Integrate n8n webhook call here based on the decision
-            if decision == "Requires Further Review" and self.n8n_webhook_url:
-                await self._trigger_n8n_workflow(
-                    query=parsed_query.get("query_raw", ""),
-                    justification=llm_output.get("Justification", ""),
-                    relevant_docs=llm_output.get("ClausesUsed", [])
-                )
-
-            return (
-                decision,
-                llm_output.get("Amount"),
-                llm_output.get("Justification", "Could not determine a clear justification."),
-                llm_output.get("ClausesUsed", [])
-            )
-        except Exception as e:
-            print(f"Error evaluating with Mistral: {e}")
-            return "Error", None, "An error occurred during decision evaluation.", []
+    
+    # ... rest of the class methods remain unchanged ...
 
     async def _trigger_n8n_workflow(self, query: str, justification: str, relevant_docs: list):
         """

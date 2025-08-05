@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 from typing import Optional, List
 from ..services.llm_service import LLMService
 from ..services.voice_service import VoiceService
@@ -11,7 +11,7 @@ voice_service = VoiceService()
 
 class QueryRequest(BaseModel):
     query: str
-    document_urls: List[HttpUrl] = []  # List of URLs to PDF documents
+    document_urls: List[str] = []  # Changed HttpUrl to str
     voice_input: bool = False
     return_voice: bool = False
 
@@ -23,7 +23,6 @@ async def inquire_admission(request: QueryRequest):
         else:
             text_query = request.query
 
-        # Process the query along with the document URLs
         decision_response = await llm_service.process_admission_query(
             text_query,
             document_urls=request.document_urls

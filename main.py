@@ -198,13 +198,17 @@ async def inquire_admission(request: QueryRequest):
     logger.info(f"Processing question: '{request.query}'")
     
     try:
+        # Get the answer from the RAG chain
         answer = await process_question_with_retries(request.query, rag_state.vector_store)
         
+        # Create a more complete payload for the webhook
         webhook_payload = {
             "original_query": request.query,
             "answer": answer,
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
         }
+        
+        # Trigger the n8n webhook with the new payload
         trigger_n8n_workflow(webhook_payload)
 
         logger.info("--- Question processed. Sending response. ---")

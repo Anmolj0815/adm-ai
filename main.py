@@ -133,7 +133,8 @@ def trigger_n8n_workflow(payload: Dict[str, Any]):
             async with httpx.AsyncClient() as client:
                 response = await client.post(N8N_WEBHOOK_URL, json=payload, timeout=5)
                 response.raise_for_status()
-                logger.info(f"Successfully triggered n8n workflow. Response status: {response.status}")
+                # Corrected line: use response.status_code
+                logger.info(f"Successfully triggered n8n workflow. Response status: {response.status_code}")
         
         asyncio.create_task(make_request())
     except Exception as e:

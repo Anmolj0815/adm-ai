@@ -25,21 +25,24 @@ class LLMService:
             self.client = None
 
         self.document_processor = DocumentProcessor()
-        self.indexed_documents_data = [] # Initialize with an empty list
+        self.indexed_documents_data = []
 
-    async def process_admission_query(self, query: str, document_urls: List[str]) -> AdmissionDecisionResponse:
-        indexed_documents_data = []
-        if document_urls:
-            for url in document_urls:
-                print(f"Processing document from URL for RAG: {url}")
-                try:
-                    doc_data = await self.document_processor.process_url_for_embeddings(url)
-                    if doc_data:
-                        indexed_documents_data.extend(doc_data)
-                except Exception as e:
-                    print(f"Error processing document from {url}: {e}")
+    async def process_admission_query(self, query: str) -> AdmissionDecisionResponse:
+        """
+        TEMPORARY DIAGNOSTIC METHOD:
+        This method skips the FAISS retrieval step and sends the entire document text
+        as context to the LLM to check if the PDF text extraction is working correctly.
+        """
+        full_document_text = ""
+        data_dir = "data/admission_policies"
+        if os.path.exists(data_dir):
+            for file_name in os.listdir(data_dir):
+                if file_name.endswith(".pdf"):
+                    file_path = os.path.join(data_dir, file_name)
+                    full_document_text += self.document_processor._extract_text_from_pdf(file_path)
         
-        retrieved_information = self._semantically_retrieve_information(query, indexed_documents_data)
+        # We put the entire document text into a list to match the expected input for _evaluate_with_llm
+        retrieved_information = [full_document_text]
         parsed_query = self._parse_query_with_llm(query)
         decision, amount, justification, clauses_used = await self._evaluate_with_llm(parsed_query, retrieved_information)
         return AdmissionDecisionResponse(
@@ -48,7 +51,7 @@ class LLMService:
             Justification=justification,
             ClausesUsed=clauses_used
         )
-    
+
     def _parse_query_with_llm(self, query: str) -> Dict[str, Any]:
         messages = [
             ChatMessage(role="system", content="You are a helpful assistant that extracts key details from admission queries."),
@@ -67,38 +70,8 @@ class LLMService:
             return {"query_raw": query, "program_name": "N/A", "eligibility_criteria": "N/A", "location": "N/A", "application_deadlines": "N/A", "fees_scholarships": "N/A"}
 
     def _semantically_retrieve_information(self, query: str, indexed_documents_data: List[Dict[str, Any]]) -> List[str]:
-        if not indexed_documents_data:
-            return ["No documents provided or processed for retrieval."]
-
-        query_embedding_response = self.client.embeddings(
-            model="mistral-embed",
-            input=[query]
-        )
-        query_embedding = np.array(query_embedding_response.data[0].embedding)
-
-        document_embeddings = np.array([d["embedding"] for d in indexed_documents_data])
-        document_texts = [d["text"] for d in indexed_documents_data]
-
-        document_embeddings = document_embeddings.astype('float32')
-        query_embedding = query_embedding.astype('float32')
-
-        dimension = document_embeddings.shape[1]
-        index = faiss.IndexFlatL2(dimension)
-        index.add(document_embeddings)
-
-        k = min(5, len(indexed_documents_data))
-        distances, indices = index.search(np.expand_dims(query_embedding, axis=0), k)
-
-        relevant_clauses = []
-        for i in indices[0]:
-            if i != -1:
-                relevant_clauses.append(document_texts[i])
-        
-        if not relevant_clauses:
-            return ["No highly relevant information found in the provided documents."]
-
-        print(f"Retrieved {len(relevant_clauses)} relevant clauses using FAISS.")
-        return relevant_clauses
+        # This method is not used in the temporary fix above.
+        return ["RAG retrieval is temporarily disabled for diagnostic purposes."]
 
     async def _evaluate_with_llm(self, parsed_query: Dict[str, Any], relevant_information: List[str]) -> tuple:
         combined_context = "\n".join(relevant_information)
@@ -111,7 +84,7 @@ class LLMService:
         2.  **Be specific and factual.** Do not make assumptions or generalize.
         3.  **For Eligibility:** Provide specific percentages, degree requirements, and deadlines.
         4.  **For Final Selection:** Provide the parameters and their exact percentage weights.
-        5.  **If the answer is not in the context,** answer with your own knowledge."
+        5.  **If the answer is not in the context,** state: "I cannot answer this question based on the provided documents."
 
         The query details have been pre-parsed for you, and relevant document clauses have been retrieved.
 

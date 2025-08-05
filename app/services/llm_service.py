@@ -25,12 +25,26 @@ class LLMService:
             self.client = None
 
         self.document_processor = DocumentProcessor()
-        self.indexed_documents_data = []  # Initialize with an empty list
-            
-    async def process_admission_query(self, query: str) -> AdmissionDecisionResponse:
-        retrieved_information = self._semantically_retrieve_information(query, self.indexed_documents_data)
+
+    async def process_admission_query(self, query: str, document_urls: List[str]) -> AdmissionDecisionResponse:
+        indexed_documents_data = []
+        if document_urls:
+            # Dynamically parse, chunk, embed and index documents from provided URLs
+            for url in document_urls:
+                print(f"Processing document from URL for RAG: {url}")
+                try:
+                    doc_data = await self.document_processor.process_url_for_embeddings(url)
+                    if doc_data:
+                        indexed_documents_data.extend(doc_data)
+                except Exception as e:
+                    print(f"Error processing document from {url}: {e}")
+
+        retrieved_information = self._semantically_retrieve_information(query, indexed_documents_data)
+
         parsed_query = self._parse_query_with_llm(query)
+
         decision, amount, justification, clauses_used = await self._evaluate_with_llm(parsed_query, retrieved_information)
+
         return AdmissionDecisionResponse(
             Decision=decision,
             Amount=amount,
@@ -135,32 +149,4 @@ class LLMService:
             if decision == "Requires Further Review" and self.n8n_webhook_url:
                 await self._trigger_n8n_workflow(
                     query=parsed_query.get("query_raw", ""),
-                    justification=llm_output.get("Justification", ""),
-                    relevant_docs=llm_output.get("ClausesUsed", [])
-                )
-
-            return (
-                decision,
-                llm_output.get("Amount"),
-                llm_output.get("Justification", "Could not determine a clear justification."),
-                llm_output.get("ClausesUsed", [])
-            )
-        except Exception as e:
-            print(f"Error evaluating with Mistral: {e}")
-            return "Error", None, "An error occurred during decision evaluation.", []
-
-    async def _trigger_n8n_workflow(self, query: str, justification: str, relevant_docs: list):
-        webhook_payload = {
-            "original_query": query,
-            "decision_justification": justification,
-            "clauses_used": relevant_docs,
-            "action_required": "Follow-up with admissions team"
-        }
-        
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(self.n8n_webhook_url, json=webhook_payload, timeout=5) as response:
-                    response.raise_for_status()
-                    print(f"Successfully triggered n8n workflow. Response status: {response.status}")
-        except Exception as e:
-            print(f"Error calling n8n webhook: {e}")
+                    justification=llm_output

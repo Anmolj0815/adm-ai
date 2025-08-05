@@ -10,4 +10,4 @@ aiofiles==23.2.1
 pypdf==4.2.0
 faiss-cpu==1.8.0
 numpy==1.26.4
-packaging==24.0  # Add this line
+packaging==24.0

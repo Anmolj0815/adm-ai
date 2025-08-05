@@ -5,8 +5,9 @@ mistralai==0.1.6
 pydantic==2.7.4
 elevenlabs==0.2.27
 requests==2.32.3
-aiohttp==3.9.5  # For asynchronous HTTP requests
+aiohttp==3.9.5
 aiofiles==23.2.1
 pypdf==4.2.0
 faiss-cpu==1.8.0
 numpy==1.26.4
+packaging==24.0  # Add this line

@@ -11,6 +11,7 @@ voice_service = VoiceService()
 
 class QueryRequest(BaseModel):
     query: str
+    document_urls: List[str] = []
     voice_input: bool = False
     return_voice: bool = False
 
@@ -22,7 +23,10 @@ async def inquire_admission(request: QueryRequest):
         else:
             text_query = request.query
 
-        decision_response = await llm_service.process_admission_query(text_query)
+        decision_response = await llm_service.process_admission_query(
+            text_query,
+            document_urls=request.document_urls
+        )
 
         if request.return_voice:
             voice_output_url = await voice_service.text_to_speech(decision_response.Justification)

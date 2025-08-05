@@ -25,19 +25,8 @@ class LLMService:
             self.client = None
 
         self.document_processor = DocumentProcessor()
-        self.indexed_documents_data = self._load_embeddings()
-        if self.indexed_documents_data:
-            print(f"Loaded {len(self.indexed_documents_data)} document chunks for RAG.")
-
-    def _load_embeddings(self):
-        embeddings_path = "data/embeddings/admissions_embeddings.pkl"
-        if os.path.exists(embeddings_path):
-            with open(embeddings_path, 'rb') as f:
-                return pickle.load(f)
-        else:
-            print("WARNING: Embeddings file not found. RAG functionality will be limited.")
-            return []
-
+        self.indexed_documents_data = []  # Initialize with an empty list
+            
     async def process_admission_query(self, query: str) -> AdmissionDecisionResponse:
         retrieved_information = self._semantically_retrieve_information(query, self.indexed_documents_data)
         parsed_query = self._parse_query_with_llm(query)

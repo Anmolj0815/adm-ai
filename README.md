@@ -32,7 +32,7 @@ Follow these steps to set up and run the application on your local machine.
 1. Clone the Repository
 Bash
 
-git clone https://github.com/your-username/swafinix-admission-ai-assistant.git
+git clone [https://github.com/your-username/swafinix-admission-ai-assistant.git](https://github.com/Anmolj0815/adm-ai.git)
 cd swafinix-admission-ai-assistant
 2. Set Up Environment Variables
 Create a .env file in the project's root directory based on the .env.example file and fill in your API keys.

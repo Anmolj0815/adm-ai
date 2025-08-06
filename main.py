@@ -54,13 +54,6 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# --- Pydantic Models for API Request/Response ---
-class QueryRequest(BaseModel):
-    query: str
-
-class QueryResponse(BaseModel):
-    answer: str
-
 # --- Global State for the RAG System ---
 class RAGState:
     vector_store: Optional[FAISS] = None
@@ -183,6 +176,15 @@ async def startup_event():
         raise RuntimeError(f"RAG system initialization failed: {e}")
 
 # --- API Endpoint ---
+class QueryRequest(BaseModel):
+    query: str
+    voice_input: bool = False
+    return_voice: bool = False
+
+class QueryResponse(BaseModel):
+    answer: str
+    VoiceOutputUrl: Optional[str] = None
+
 @app.post(
     "/inquire",
     response_model=QueryResponse,
@@ -194,15 +196,19 @@ async def inquire_admission(request: QueryRequest):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="RAG system is not initialized. Check startup logs for errors."
         )
-    
-    # --- ADD THIS DEBUGGING LINE ---
-    print(f"Received query: {request.query}")
+
     logger.info(f"Processing question: '{request.query}'")
     
     try:
         # Get the answer from the RAG chain
         answer = await process_question_with_retries(request.query, rag_state.vector_store)
         
+        voice_url = None
+        if request.return_voice:
+            from .voice_service import VoiceService
+            voice_service = VoiceService()
+            voice_url = await voice_service.text_to_speech(answer)
+
         # Create a complete payload for the webhook
         webhook_payload = {
             "original_query": request.query,
@@ -210,11 +216,10 @@ async def inquire_admission(request: QueryRequest):
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
         }
         
-        # Trigger the n8n webhook with the new payload
         trigger_n8n_workflow(webhook_payload)
 
         logger.info("--- Question processed. Sending response. ---")
-        return {"answer": answer}
+        return {"answer": answer, "VoiceOutputUrl": voice_url}
 
     except Exception as e:
         logger.exception(f"An unexpected error occurred while processing question '{request.query}': {e}")

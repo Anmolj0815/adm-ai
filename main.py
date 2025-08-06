@@ -78,7 +78,7 @@ def text_to_speech(text: str) -> Optional[str]:
 
     try:
         # Use a real voice ID
-        voice_id = "21m00Tcm4TlvDq8ikWAM"  # Example Voice ID (for 'Rachel')
+        voice_id = "KSsyodh37PbfWy29kPtx"  # Example Voice ID (for 'Rachel')
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 
         headers = {

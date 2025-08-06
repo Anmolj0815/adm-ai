@@ -77,7 +77,10 @@ def text_to_speech(text: str) -> Optional[str]:
         return None
 
     try:
-        url = "https://api.elevenlabs.io/v1/text-to-speech/voice-id"  # Replace with a real voice ID
+        # Use a real voice ID
+        voice_id = "21m00Tcm4TlvDq8ikWAM"  # Example Voice ID (for 'Rachel')
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+
         headers = {
             "Accept": "audio/mpeg",
             "Content-Type": "application/json",

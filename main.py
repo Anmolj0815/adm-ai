@@ -45,6 +45,7 @@ if not MISTRAL_API_KEY:
     raise ValueError("MISTRAL_API_KEY environment variable is not set.")
 
 N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL")
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 
 # PDF Path
 PDF_DIR = "data/admission_policies"
@@ -68,6 +69,39 @@ if not logger.handlers:
     formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+
+# --- ElevenLabs Voice Service ---
+def text_to_speech(text: str) -> Optional[str]:
+    if not ELEVENLABS_API_KEY:
+        logger.warning("ELEVENLABS_API_KEY not found. Skipping voice generation.")
+        return None
+
+    try:
+        url = "https://api.elevenlabs.io/v1/text-to-speech/voice-id"  # Replace with a real voice ID
+        headers = {
+            "Accept": "audio/mpeg",
+            "Content-Type": "application/json",
+            "xi-api-key": ELEVENLABS_API_KEY
+        }
+        data = {
+            "text": text,
+            "voice_settings": {
+                "stability": 0.5,
+                "similarity_boost": 0.5
+            }
+        }
+        
+        response = requests.post(url, json=data, headers=headers)
+        response.raise_for_status()
+        
+        # In a real app, you'd save this audio or upload it.
+        # For a hackathon, let's return a mock URL.
+        logger.info("Successfully generated voice output.")
+        return "https://example.com/generated_audio.mp3"
+    
+    except Exception as e:
+        logger.error(f"Error calling ElevenLabs API: {e}")
+        return None
 
 # --- Document Processing and RAG Chain Setup ---
 PROMPT_TEMPLATE = """
@@ -200,16 +234,13 @@ async def inquire_admission(request: QueryRequest):
     logger.info(f"Processing question: '{request.query}'")
     
     try:
-        # Get the answer from the RAG chain
         answer = await process_question_with_retries(request.query, rag_state.vector_store)
         
         voice_url = None
         if request.return_voice:
-            from .voice_service import VoiceService
-            voice_service = VoiceService()
-            voice_url = await voice_service.text_to_speech(answer)
+            # Call the text_to_speech function directly
+            voice_url = text_to_speech(answer)
 
-        # Create a complete payload for the webhook
         webhook_payload = {
             "original_query": request.query,
             "answer": answer,
